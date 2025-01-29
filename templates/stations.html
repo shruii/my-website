@@ -5,46 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EV Charging Stations - ChargeRoute</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry"></script>
+    <script>
+        function initMap() {
+            const map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 7,
+                center: { lat: {{ route[0].lat }}, lng: {{ route[0].lng }} }
+            });
+
+            const routeCoordinates = {{ route | tojson }};
+            const stations = {{ stations | tojson }};
+            
+            console.log("Stations:", stations);  // Log stations data to console
+
+            const routePath = new google.maps.Polyline({
+                path: routeCoordinates,
+                geodesic: true,
+                strokeColor: "#4285F4",
+                strokeOpacity: 1.0,
+                strokeWeight: 4,
+            });
+            routePath.setMap(map);
+
+            const bounds = new google.maps.LatLngBounds();
+            stations.forEach(station => {
+                const latLng = new google.maps.LatLng(station.lat, station.lng);
+                bounds.extend(latLng);
+                new google.maps.Marker({
+                    position: latLng,
+                    map,
+                    title: station.name,
+                });
+            });
+
+            map.fitBounds(bounds);  // Automatically zoom to fit stations
+        }
+    </script>
 </head>
-<body class="bg-gray-100">
-    <!-- Header -->
+<body class="bg-gray-100" onload="initMap()">
     <header class="bg-white shadow-md py-4">
         <div class="container mx-auto flex justify-between items-center px-4">
             <h1 class="text-xl font-bold text-blue-500">ChargeRoute</h1>
-            <nav class="flex space-x-4">
-                <a href="#" class="text-gray-600 hover:text-blue-500">Help</a>
-                <a href="#" class="text-gray-600 hover:text-blue-500">English</a>
-                <a href="#" class="text-gray-600 hover:text-blue-500">Account</a>
-            </nav>
         </div>
     </header>
-
-    <!-- Stations Section -->
     <main class="py-12">
         <div class="container mx-auto text-center">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4">Charging Stations along Your Route</h2>
-            <p class="text-gray-700 mb-6">Stations between {{ from_location }} and {{ to_location }}.</p>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {% for station in stations %}
-                <div class="bg-white p-6 rounded-lg shadow-lg">
-                    <h3 class="text-xl font-bold text-blue-500">{{ station.name }}</h3>
-                    <p class="text-gray-700">Address: {{ station.address }}</p>
-                    <p class="text-gray-700">Distance: {{ station.distance }} km</p>
-                    <p class="text-gray-700">Status: {{ station.status }}</p>
-                    <p class="text-gray-700">Charger Type: {{ station.charger_type }}</p>
-                    <a href="https://www.google.com/maps?q={{ station.address }}" target="_blank" class="text-blue-500 hover:underline mt-4 block">View on Google Maps</a>
-                </div>
-                {% endfor %}
-            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Charging Stations Along Your Route</h2>
+            <div id="map" class="w-full h-96 bg-gray-200"></div>
         </div>
     </main>
-
-    <!-- Footer -->
-    <footer class="bg-gray-800 py-6 mt-12">
-        <div class="container mx-auto text-center text-gray-400">
-            <p>&copy;2025 ChargeRoute. Simplifying EV travel, one route at a time.</p>
-        </div>
-    </footer>
 </body>
 </html>
