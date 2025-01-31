@@ -1,104 +1,128 @@
-from flask import Flask, render_template, request, jsonify
 import requests
-import os
+from flask import Flask, render_template, request
+from geopy.distance import geodesic
 from dotenv import load_dotenv
+import os
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Initialize Flask app
 app = Flask(__name__)
 
 # Get API keys from environment variables
-OPEN_CHARGE_API_KEY = os.getenv('OPEN_CHARGE_API_KEY')
 GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY')
+OPEN_CHARGE_API_KEY = os.getenv('OPEN_CHARGE_API_KEY')
 
-# API URLs
-GOOGLE_MAPS_DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json"
-OPEN_CHARGE_API_URL = "https://api.openchargemap.io/v3/poi"
+# Vehicle range dictionary (assumed ranges in km for simplicity)
+vehicle_ranges = {
+    'Model X': 500,
+    'Model Y': 450,
+    'Tata Nexon': 312,
+    'Mahindra e2o': 140
+}
 
 @app.route('/')
-def index():
-    """Render the homepage with search inputs."""
+def home():
     return render_template('index.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
 @app.route('/search', methods=['POST'])
-def search_route():
-    """Handle search and fetch route with charging stations."""
-    # Get user inputs
+def search():
     from_location = request.form['from']
     to_location = request.form['to']
+    vehicle_model = request.form['vehicle_model']
+    battery_level = int(request.form['battery_level'])
+    charger_type = request.form['charger_type']
+    station_status = request.form['station_status']
 
-    # Fetch the route using Google Maps Directions API
-    route = get_route(from_location, to_location)
+    # Fetch multiple routes
+    routes = get_route(from_location, to_location)
+    if not routes:
+        return "Error: Could not fetch routes. Please check your input and try again."
 
-    if not route:
-        return render_template('stations.html', route=[], stations=[], from_location=from_location, to_location=to_location)
+    # For simplicity, use the first route
+    selected_route = routes[0]['route']
+    charging_stations = get_charging_stations(selected_route)
 
-    # Find charging stations along the route
-    stations = get_stations_along_route(route)
-
-    # Render the results page with route and stations
-    return render_template('stations.html', route=route, stations=stations, from_location=from_location, to_location=to_location)
+    # Estimate remaining range
+    estimated_range = estimate_range(vehicle_model, battery_level)
+    return render_template('route.html', routes=routes, selected_route=selected_route, stations=charging_stations, estimated_range=estimated_range, google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
 def get_route(from_location, to_location):
-    """Fetch the route between two locations using Google Maps Directions API."""
+    # Get multiple routes from Google Maps Directions API
     params = {
         'origin': from_location,
         'destination': to_location,
+        'alternatives': 'true',  # Fetch alternative routes
         'key': GOOGLE_MAPS_API_KEY,
     }
-    response = requests.get(GOOGLE_MAPS_DIRECTIONS_URL, params=params)
-    data = response.json()
+    try:
+        response = requests.get('https://maps.googleapis.com/maps/api/directions/json', params=params)
+        response.raise_for_status()
+        data = response.json()
 
-    if data.get('status') == 'OK':
-        steps = []
-        for leg in data['routes'][0]['legs']:
-            for step in leg['steps']:
-                lat = step['end_location']['lat']
-                lng = step['end_location']['lng']
-                steps.append({'lat': lat, 'lng': lng})
-        return steps
-    return None
+        if data.get('status') == 'OK':
+            routes = []
+            for route in data['routes']:
+                total_distance = 0
+                total_duration = 0
+                steps = []
+                for leg in route['legs']:
+                    total_distance += leg['distance']['value']
+                    total_duration += leg['duration']['value']
+                    for step in leg['steps']:
+                        lat = step['end_location']['lat']
+                        lng = step['end_location']['lng']
+                        steps.append({'lat': lat, 'lng': lng})
+                routes.append({
+                    'distance': total_distance,
+                    'duration': total_duration,
+                    'route': steps,
+                })
+            return routes
+        else:
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching route: {e}")
+        return None
 
-def get_stations_along_route(route):
-    """Fetch charging stations along the route using Open Charge Map API."""
+def get_charging_stations(route):
     stations = []
     for point in route:
         params = {
-            'latitude': point['lat'],
-            'longitude': point['lng'],
-            'distance': 15,  # Search within 5 km radius
-            'maxresults': 20,  # Limit results per step
-            'key': OPEN_CHARGE_API_KEY,
+            'location': f"{point['lat']},{point['lng']}",
+            'radius': 5000,  # Search radius in meters (5 km)
+            'type': 'electric_vehicle_charging_station',
+            'key': GOOGLE_MAPS_API_KEY,
         }
-        response = requests.get(OPEN_CHARGE_API_URL, params=params)
-        if response.status_code == 200:
-            stations.extend(response.json())
-        else:
-            print(f"Error fetching stations for {point['lat']}, {point['lng']}")
+        try:
+            response = requests.get('https://maps.googleapis.com/maps/api/place/nearbysearch/json', params=params)
+            response.raise_for_status()
+            data = response.json()
+            if data.get('status') == 'OK':
+                for place in data['results']:
+                    station = {
+                        'name': place.get('name', 'Unknown'),
+                        'address': place.get('vicinity', 'Unknown'),
+                        'lat': place['geometry']['location']['lat'],
+                        'lng': place['geometry']['location']['lng'],
+                        'rating': place.get('rating', 'N/A'),
+                        'distance': calculate_distance_from_route({'lat': place['geometry']['location']['lat'], 'lng': place['geometry']['location']['lng']}, route)
+                    }
+                    stations.append(station)
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching charging stations: {e}")
+    return stations
 
-    if not stations:
-        print("No stations found.")
-    else:
-        print(f"Found {len(stations)} stations")
+def calculate_distance_from_route(station, route):
+    station_coords = (station['lat'], station['lng'])
+    route_coords = [(point['lat'], point['lng']) for point in route]
+    min_distance = min([geodesic(station_coords, point).km for point in route_coords])
+    return round(min_distance, 2)
 
-    return format_stations(stations)
-
-def format_stations(stations):
-    """Format charging station data for rendering."""
-    formatted = []
-    for station in stations:
-        formatted.append({
-            'name': station.get('AddressInfo', {}).get('Title', 'Unknown'),
-            'address': station.get('AddressInfo', {}).get('AddressLine1', 'Unknown'),
-            'distance': station.get('AddressInfo', {}).get('Distance', 'Unknown'),
-            'status': station.get('StatusType', {}).get('Title', 'Unknown'),
-            'charger_type': station.get('Connections', [{}])[0].get('ConnectionType', {}).get('Title', 'Unknown'),
-            'lat': station.get('AddressInfo', {}).get('Latitude', 0),
-            'lng': station.get('AddressInfo', {}).get('Longitude', 0),
-        })
-    return formatted
+def estimate_range(vehicle_model, battery_level):
+    max_range = vehicle_ranges.get(vehicle_model, 0)
+    estimated_range = (battery_level / 100) * max_range
+    return round(estimated_range, 2)
 
 if __name__ == '__main__':
     app.run(debug=True)
