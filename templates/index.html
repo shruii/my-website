@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,6 +13,7 @@
         }
     </style>
 </head>
+<<<<<<< HEAD
 <body class="bg-gray-50">
     <header class="bg-white shadow-sm py-4">
         <div class="container mx-auto px-4">
@@ -87,5 +89,175 @@
         
         document.addEventListener('DOMContentLoaded', initAutocomplete);
     </script>
+=======
+<body class="bg-gray-100 min-h-screen" onload="initAutocomplete()">
+    <!-- Header -->
+    <header class="bg-white shadow-md py-4 fixed w-full top-0 z-50">
+        <div class="container mx-auto flex justify-between items-center px-4">
+            <h1 class="text-2xl font-bold text-blue-600">ChargeRoute</h1>
+            <nav>
+                <a href="#how-it-works" class="text-gray-600 hover:text-blue-600 mx-4">How It Works</a>
+                <a href="#supported-vehicles" class="text-gray-600 hover:text-blue-600 mx-4">Supported Vehicles</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="pt-20">
+        <!-- Hero Section -->
+        <section class="bg-gradient-to-r from-blue-600 to-blue-400 py-16">
+            <div class="container mx-auto text-center px-4">
+                <h2 class="text-4xl font-bold text-white mb-6">Plan Your EV Journey with Ease</h2>
+                <p class="text-white text-xl mb-8">Find the best routes with charging stations for your electric vehicle</p>
+                
+                <!-- Search Form -->
+                <div class="bg-white p-8 rounded-lg shadow-xl max-w-2xl mx-auto">
+                    <form action="/search" method="POST" class="space-y-6">
+                        <!-- From Location -->
+                        <div class="relative">
+                            <label for="from" class="block text-gray-700 text-sm font-bold mb-2 text-left">From</label>
+                            <input type="text" id="from" name="from" 
+                                   class="w-full p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Enter starting location" required>
+                        </div>
+
+                        <!-- To Location -->
+                        <div class="relative">
+                            <label for="to" class="block text-gray-700 text-sm font-bold mb-2 text-left">To</label>
+                            <input type="text" id="to" name="to" 
+                                   class="w-full p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Enter destination" required>
+                        </div>
+
+                        <!-- Vehicle Selection -->
+                        <div>
+                            <label for="vehicle-model" class="block text-gray-700 text-sm font-bold mb-2 text-left">Vehicle Model</label>
+                            <select id="vehicle-model" name="vehicle_model" 
+                                    class="w-full p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="Tata Nexon">Tata Nexon EV</option>
+                                <option value="Mahindra e2o">Mahindra e2o</option>
+                                <option value="MG ZS EV">MG ZS EV</option>
+                                <option value="Hyundai Kona">Hyundai Kona Electric</option>
+                            </select>
+                        </div>
+
+                        <!-- Battery Level -->
+                        <div>
+                            <label for="battery-level" class="block text-gray-700 text-sm font-bold mb-2 text-left">
+                                Current Battery Level (%)
+                            </label>
+                            <input type="number" id="battery-level" name="battery_level" 
+                                   class="w-full p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   min="0" max="100" required>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <button type="submit" 
+                                class="w-full bg-blue-600 text-white py-4 px-6 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors">
+                            Find Routes
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works Section -->
+        <section id="how-it-works" class="py-16 bg-white">
+            <div class="container mx-auto px-4">
+                <h2 class="text-3xl font-bold text-center mb-12">How It Works</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="text-center p-6">
+                        <div class="bg-blue-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                            <span class="text-2xl text-blue-600">1</span>
+                        </div>
+                        <h3 class="text-xl font-semibold mb-4">Enter Your Journey</h3>
+                        <p class="text-gray-600">Input your start and end locations along with your vehicle details</p>
+                    </div>
+                    <div class="text-center p-6">
+                        <div class="bg-blue-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                            <span class="text-2xl text-blue-600">2</span>
+                        </div>
+                        <h3 class="text-xl font-semibold mb-4">Choose Your Route</h3>
+                        <p class="text-gray-600">Select from multiple route options based on your preferences</p>
+                    </div>
+                    <div class="text-center p-6">
+                        <div class="bg-blue-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                            <span class="text-2xl text-blue-600">3</span>
+                        </div>
+                        <h3 class="text-xl font-semibold mb-4">Find Charging Stations</h3>
+                        <p class="text-gray-600">View all available charging stations along your chosen route</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Supported Vehicles Section -->
+        <section id="supported-vehicles" class="py-16 bg-gray-50">
+            <div class="container mx-auto px-4">
+                <h2 class="text-3xl font-bold text-center mb-12">Supported Vehicles</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h3 class="text-xl font-semibold mb-4">Tata Nexon EV</h3>
+                        <ul class="space-y-2 text-gray-600">
+                            <li>Range: 312 km</li>
+                            <li>Battery: 30.2 kWh</li>
+                            <li>Fast Charging: Available</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h3 class="text-xl font-semibold mb-4">Mahindra e2o</h3>
+                        <ul class="space-y-2 text-gray-600">
+                            <li>Range: 140 km</li>
+                            <li>Battery: 15.44 kWh</li>
+                            <li>Fast Charging: Limited</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h3 class="text-xl font-semibold mb-4">MG ZS EV</h3>
+                        <ul class="space-y-2 text-gray-600">
+                            <li>Range: 419 km</li>
+                            <li>Battery: 44.5 kWh</li>
+                            <li>Fast Charging: Available</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h3 class="text-xl font-semibold mb-4">Hyundai Kona</h3>
+                        <ul class="space-y-2 text-gray-600">
+                            <li>Range: 452 km</li>
+                            <li>Battery: 39.2 kWh</li>
+                            <li>Fast Charging: Available</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-8">
+        <div class="container mx-auto px-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div>
+                    <h3 class="text-xl font-bold mb-4">ChargeRoute</h3>
+                    <p class="text-gray-400">Making EV journeys easier and more convenient</p>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold mb-4">Quick Links</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#how-it-works" class="text-gray-400 hover:text-white">How It Works</a></li>
+                        <li><a href="#supported-vehicles" class="text-gray-400 hover:text-white">Supported Vehicles</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold mb-4">Contact</h3>
+                    <p class="text-gray-400">Email: support@chargeroute.com</p>
+                </div>
+            </div>
+            <div class="mt-8 pt-8 border-t border-gray-700 text-center">
+                <p class="text-gray-400">&copy; 2024 ChargeRoute. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+>>>>>>> 6eb94df282b107edf8005cf9b75ea824d8ad3bbf
 </body>
 </html>
