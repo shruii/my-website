@@ -3,61 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChargeRoute - EV Charging Station Finder</title>
+    <title>ChargeRoute - EV Route Planner</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places"></script>
-    <script>
-        function initAutocomplete() {
-            const fromInput = document.getElementById("from");
-            const toInput = document.getElementById("to");
-            const options = { componentRestrictions: { country: "in" } };
-            new google.maps.places.Autocomplete(fromInput, options);
-            new google.maps.places.Autocomplete(toInput, options);
+    <style>
+        .gradient-background {
+            background: linear-gradient(135deg, #4F46E5 0%, #10B981 100%);
         }
-    </script>
+    </style>
 </head>
-<body class="bg-gray-100" onload="initAutocomplete()">
-    <header class="bg-white shadow-md py-4">
-        <div class="container mx-auto flex justify-between items-center px-4">
-            <h1 class="text-xl font-bold text-blue-500">ChargeRoute</h1>
+<body class="bg-gray-50">
+    <header class="bg-white shadow-sm py-4">
+        <div class="container mx-auto px-4">
+            <h1 class="text-2xl font-bold text-indigo-600">ChargeRoute</h1>
         </div>
     </header>
-    <main class="bg-gradient-to-r from-blue-500 to-green-500 py-12">
-        <div class="container mx-auto text-center">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4">Plan Your EV Journey with Ease</h2>
-            <div class="bg-white p-6 rounded-lg shadow-lg inline-block w-full max-w-xl">
-                <form action="/search" method="POST" class="space-y-4">
-                    <input type="text" id="from" name="from" placeholder="From" class="w-full p-3 border rounded" required>
-                    <input type="text" id="to" name="to" placeholder="To" class="w-full p-3 border rounded" required>
-                    <!-- Vehicle Model Selection -->
+
+    <main class="gradient-background min-h-screen py-12">
+        <div class="container mx-auto px-4">
+            <div class="max-w-md mx-auto bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">Plan Your EV Journey</h2>
+                
+                <form action="/search" method="POST" class="space-y-6">
                     <div>
-                        <label for="vehicle-model" class="block text-gray-700">Select Vehicle Model:</label>
-                        <select id="vehicle-model" name="vehicle_model" class="w-full p-3 border rounded">
-                            <option value="Model X">Model X</option>
-                            <option value="Model Y">Model Y</option>
-                            <option value="Tata Nexon">Tata Nexon</option>
+                        <label for="from" class="block text-sm font-medium text-gray-700 mb-1">Starting Point</label>
+                        <input type="text" id="from" name="from" 
+                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                               placeholder="Enter starting location" required>
+                    </div>
+
+                    <div>
+                        <label for="to" class="block text-sm font-medium text-gray-700 mb-1">Destination</label>
+                        <input type="text" id="to" name="to" 
+                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                               placeholder="Enter destination" required>
+                    </div>
+
+                    <div>
+                        <label for="vehicle_model" class="block text-sm font-medium text-gray-700 mb-1">Vehicle Model</label>
+                        <select id="vehicle_model" name="vehicle_model" 
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="Model X">Tesla Model X</option>
+                            <option value="Model Y">Tesla Model Y</option>
+                            <option value="Tata Nexon">Tata Nexon EV</option>
                             <option value="Mahindra e2o">Mahindra e2o</option>
                         </select>
                     </div>
-                    <!-- Battery Level Input -->
+
                     <div>
-                        <label for="battery-level" class="block text-gray-700">Enter Battery Level (%):</label>
-                        <input type="number" id="battery-level" name="battery_level" class="w-full p-3 border rounded" min="0" max="100" required>
+                        <label for="battery_level" class="block text-sm font-medium text-gray-700 mb-1">Battery Level (%)</label>
+                        <input type="number" id="battery_level" name="battery_level" 
+                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                               min="0" max="100" value="100" required>
                     </div>
-                    <!-- Charger Type and Availability Filters -->
-                    <div>
-                        <label for="charger-type" class="block text-gray-700">Select Charger Type:</label>
-                        <select id="charger-type" name="charger_type" class="w-full p-3 border rounded">
-                            <option value="Fast Charger">Fast Charger</option>
-                            <option value="Type 2">Type 2</option>
-                            <option value="Normal">Normal</option>
-                        </select>
-                    </div>
-                    
-                    <button type="submit" class="bg-blue-500 text-white py-2 px-6 rounded-lg">Find Route</button>
+
+                    <button type="submit" 
+                            class="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg hover:bg-indigo-700 transition duration-200">
+                        Find Routes
+                    </button>
                 </form>
             </div>
         </div>
     </main>
+
+    <script>
+        function initAutocomplete() {
+            const options = {
+                componentRestrictions: { country: "in" },
+                fields: ["formatted_address", "geometry", "name"],
+                strictBounds: false
+            };
+            
+            new google.maps.places.Autocomplete(
+                document.getElementById("from"),
+                options
+            );
+            
+            new google.maps.places.Autocomplete(
+                document.getElementById("to"),
+                options
+            );
+        }
+        
+        document.addEventListener('DOMContentLoaded', initAutocomplete);
+    </script>
 </body>
 </html>

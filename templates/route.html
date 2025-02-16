@@ -1,98 +1,180 @@
+<!-- templates/route.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EV Charging Stations - ChargeRoute</title>
+    <title>ChargeRoute - Route Details</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry"></script>
-    <style>
-        /* Custom marker icon for charging stations */
-        .charging-icon {
-            background-image: {{ url_for('static', filename='charging-station.png') }}", // Custom icon
-            scaledSize: new google.maps.Size(32, 32), // Resize the icon
-            background-size: cover;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            cursor: pointer;
-        }
-    </style>
-    <script>
-        function initMap() {
-            const map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 7,
-                center: { lat: {{ selected_route[0].lat }}, lng: {{ selected_route[0].lng }} }
-            });
-
-            // Plot all routes
-            const routes = {{ routes | tojson }};
-            routes.forEach((route, index) => {
-                const routePath = new google.maps.Polyline({
-                    path: route.route,
-                    geodesic: true,
-                    strokeColor: index === 0 ? "#4285F4" : "#FF0000",  // First route is blue, others are red
-                    strokeOpacity: 1.0,
-                    strokeWeight: 4,
-                });
-                routePath.setMap(map);
-            });
-
-            // Plot charging stations
-            const stations = {{ stations | tojson }};
-            const bounds = new google.maps.LatLngBounds();
-            stations.forEach(station => {
-                const latLng = new google.maps.LatLng(station.lat, station.lng);
-                bounds.extend(latLng);
-
-                // Custom marker for charging stations
-                const marker = new google.maps.Marker({
-                    position: latLng,
-                    map: map,
-                    icon: {
-                        url: 'https://cdn-icons-png.flaticon.com/512/167/167755.png', // Replace with your custom icon
-                        scaledSize: new google.maps.Size(32, 32), // Resize the icon
-                    },
-                    title: station.name,
-                });
-
-                // Add click event to redirect to Google Maps
-                marker.addListener('click', () => {
-                    window.open(`https://www.google.com/maps/search/?api=1&query=${station.lat},${station.lng}`, '_blank');
-                });
-            });
-            map.fitBounds(bounds);
-        }
-    </script>
 </head>
-<body class="bg-gray-100" onload="initMap()">
-    <header class="bg-white shadow-md py-4">
-        <div class="container mx-auto flex justify-between items-center px-4">
-            <h1 class="text-xl font-bold text-blue-500">ChargeRoute</h1>
+<body class="bg-gray-50">
+    <header class="bg-white shadow-sm py-4 mb-6">
+        <div class="container mx-auto px-4">
+            <h1 class="text-2xl font-bold text-indigo-600">ChargeRoute</h1>
         </div>
     </header>
-    <main class="py-12">
-        <div class="container mx-auto">
-            <h2 class="text-center text-2xl font-bold">Route Details</h2>
-            <p class="text-center mb-4">Estimated Range for Your Vehicle: {{ estimated_range }} km</p>
-            <div id="map" style="height: 400px;" class="rounded-lg shadow-lg"></div>
 
-            <!-- Display Charging Stations -->
-            <h3 class="text-xl font-bold mt-8 mb-4">Charging Stations Along the Route</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {% for station in stations %}
-                <div class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
-                    <h4 class="font-bold text-lg">{{ station.name }}</h4>
-                    <p class="text-sm text-gray-600 mt-2">{{ station.address }}</p>
-                    <p class="text-sm text-gray-600 mt-1">Distance from Route: {{ station.distance }} km</p>
-                    <p class="text-sm text-gray-600 mt-1">Rating: {{ station.rating }}</p>
-                    <a href="https://www.google.com/maps/search/?api=1&query={{ station.lat }},{{ station.lng }}" target="_blank" class="mt-3 inline-block bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors">
-                        View on Google Maps
-                    </a>
+    <main class="container mx-auto px-4">
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Route Details</h2>
+            <div class="text-gray-600">
+                <p>From: {{ from_location }}</p>
+                <p>To: {{ to_location }}</p>
+                <p class="mt-2">Estimated Range: {{ "%.1f"|format(estimated_range) }} km</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Route Selection -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4">Available Routes</h3>
+                    <div class="space-y-4">
+                        {% for route in routes %}
+                        <div class="border rounded-lg p-4 cursor-pointer hover:bg-gray-50"
+                             onclick="showRoute({{ route.id }})">
+                            <h4 class="font-medium">Route {{ route.id + 1 }}</h4>
+                            <p class="text-sm text-gray-600">Distance: {{ route.distance }} km</p>
+                            <p class="text-sm text-gray-600">Duration: {{ route.duration }} mins</p>
+                            <p class="text-sm text-gray-600">
+                                Charging Stations: {{ route.charging_stations|length }}
+                            </p>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
-                {% endfor %}
+            </div>
+
+            <!-- Map -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div id="map" class="h-96 w-full rounded-lg"></div>
+                </div>
+
+                <!-- Charging Stations -->
+                <div id="stations-container" class="mt-6 bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4">Charging Stations</h3>
+                    <div id="stations-list" class="space-y-4">
+                        <!-- Stations will be populated by JavaScript -->
+                    </div>
+                </div>
             </div>
         </div>
     </main>
+
+    <script>
+        let map;
+        let markers = [];
+        let routeLines = [];
+        const routes = {{ routes|tojson|safe }};
+        
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 7,
+                center: { lat: routes[0].points[0].lat, lng: routes[0].points[0].lng }
+            });
+            
+            // Show first route by default
+            showRoute(0);
+        }
+
+        function showRoute(routeId) {
+            // Clear existing markers and routes
+            clearMap();
+            
+            const route = routes[routeId];
+            
+            // Draw route
+            const routePath = route.points.map(point => ({
+                lat: point.lat,
+                lng: point.lng
+            }));
+            
+            const routeLine = new google.maps.Polyline({
+                path: routePath,
+                geodesic: true,
+                strokeColor: '#4F46E5',
+                strokeOpacity: 1.0,
+                strokeWeight: 3
+            });
+            
+            routeLine.setMap(map);
+            routeLines.push(routeLine);
+            
+            // Add markers for charging stations
+            route.charging_stations.forEach(station => {
+                const marker = new google.maps.Marker({
+                    position: { lat: station.lat, lng: station.lng },
+                    map: map,
+                    title: station.name,
+                    icon: {
+                        url: station.source === 'ocm' ? 
+                            'https://maps.google.com/mapfiles/ms/icons/green-dot.png' : 
+                            'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+                    }
+                });
+                
+                markers.push(marker);
+                
+                // Add click listener
+                marker.addListener('click', () => {
+                    showStationInfo(station);
+                });
+            });
+            
+            // Fit map to show all points
+            const bounds = new google.maps.LatLngBounds();
+            route.points.forEach(point => {
+                bounds.extend(new google.maps.LatLng(point.lat, point.lng));
+            });
+            map.fitBounds(bounds);
+            
+            // Update stations list
+            updateStationsList(route.charging_stations);
+        }
+
+        function clearMap() {
+            markers.forEach(marker => marker.setMap(null));
+            routeLines.forEach(line => line.setMap(null));
+            markers = [];
+            routeLines = [];
+        }
+
+        function updateStationsList(stations) {
+            const container = document.getElementById('stations-list');
+            container.innerHTML = '';
+            
+            stations.forEach(station => {
+                const div = document.createElement('div');
+                div.className = 'border rounded-lg p-4';
+                div.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-medium">${station.name}</h4>
+                        <span class="text-sm px-2 py-1 rounded ${
+                            station.is_operational ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }">
+                            ${station.is_operational ? 'Operational' : 'Not Operational'}
+                        </span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-1">${station.address}</p>
+                    ${station.source === 'ocm' ? 
+                        `<p class="text-sm text-gray-600">Power: ${station.power_kw}kW</p>
+                         <p class="text-sm text-gray-600">Connectors: ${station.connectors.join(', ')}</p>` :
+                        `<p class="text-sm text-gray-600">Rating: ${station.rating}</p>`
+                    }
+                    <a href="https://www.google.com/maps/search/?api=1&query=${station.lat},${station.lng}" 
+                       target="_blank" 
+                       class="text-indigo-600 text-sm hover:text-indigo-800">
+                        View on Google Maps
+                    </a>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Initialize map on page load
+        document.addEventListener('DOMContentLoaded', initMap);
+    </script>
 </body>
 </html>
