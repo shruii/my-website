@@ -30,9 +30,10 @@
             <div class="lg:col-span-1">
                 <div class="bg-white rounded-xl shadow-lg p-6">
                     <h3 class="text-lg font-semibold mb-4">Available Routes</h3>
-                    <div class="space-y-4">
+                    <div class="space-y-4" id="routes-container">
                         {% for route in routes %}
-                        <div class="border rounded-lg p-4 cursor-pointer hover:bg-gray-50"
+                        <div class="border rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors duration-200 {% if loop.index0 == 0 %}bg-indigo-50 border-indigo-300{% endif %}"
+                             id="route-option-{{ route.id }}"
                              onclick="showRoute({{ route.id }})">
                             <h4 class="font-medium">Route {{ route.id + 1 }}</h4>
                             <p class="text-sm text-gray-600">Distance: {{ route.distance }} km</p>
@@ -42,6 +43,21 @@
                             </p>
                         </div>
                         {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- Legend for station markers -->
+                <div class="bg-white rounded-xl shadow-lg p-6 mt-6">
+                    <h3 class="text-lg font-semibold mb-4">Legend</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center">
+                            <img src="https://maps.google.com/mapfiles/ms/icons/blue-dot.png" alt="Google Maps" class="mr-2" style="width: 20px; height: 20px;">
+                            <span class="text-sm">Google Maps Charging Station</span>
+                        </div>
+                        <div class="flex items-center">
+                            <img src="https://maps.google.com/mapfiles/ms/icons/green-dot.png" alt="Open Charge Map" class="mr-2" style="width: 20px; height: 20px;">
+                            <span class="text-sm">Open Charge Map Station</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -57,7 +73,31 @@
                     <h3 class="text-lg font-semibold mb-4">Charging Stations</h3>
                     <div id="stations-list" class="space-y-4">
                         <!-- Stations will be populated by JavaScript -->
+                        <p id="no-stations-message" class="text-gray-500 text-center py-4 hidden">No charging stations found on this route.</p>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Station Info Modal -->
+        <div id="station-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+                <div class="flex justify-between items-start mb-4">
+                    <h3 id="modal-title" class="text-lg font-semibold"></h3>
+                    <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div id="modal-content" class="space-y-3"></div>
+                <div class="mt-6 flex justify-end">
+                    <button id="modal-directions-btn" class="mr-2 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition duration-200">
+                        Get Directions
+                    </button>
+                    <button onclick="closeModal()" class="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 transition duration-200">
+                        Close
+                    </button>
                 </div>
             </div>
         </div>
@@ -67,12 +107,19 @@
         let map;
         let markers = [];
         let routeLines = [];
+        let currentRouteId = 0;
+        let selectedMarker = null;
+        let infoWindows = [];
         const routes = {{ routes|tojson|safe }};
         
         function initMap() {
             map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 7,
-                center: { lat: routes[0].points[0].lat, lng: routes[0].points[0].lng }
+                center: { lat: routes[0].points[0].lat, lng: routes[0].points[0].lng },
+                mapTypeControl: true,
+                fullscreenControl: true,
+                streetViewControl: false,
+                mapTypeId: google.maps.MapTypeId.ROADMAP
             });
             
             // Show first route by default
@@ -80,6 +127,18 @@
         }
 
         function showRoute(routeId) {
+            // Highlight selected route
+            document.querySelectorAll('#routes-container > div').forEach(div => {
+                div.classList.remove('bg-indigo-50', 'border-indigo-300');
+            });
+            const selectedRoute = document.getElementById(`route-option-${routeId}`);
+            if (selectedRoute) {
+                selectedRoute.classList.add('bg-indigo-50', 'border-indigo-300');
+            }
+            
+            // Store current route ID
+            currentRouteId = routeId;
+            
             // Clear existing markers and routes
             clearMap();
             
@@ -104,10 +163,12 @@
             
             // Add markers for charging stations
             route.charging_stations.forEach(station => {
+                // Create marker
                 const marker = new google.maps.Marker({
                     position: { lat: station.lat, lng: station.lng },
                     map: map,
                     title: station.name,
+                    animation: google.maps.Animation.DROP,
                     icon: {
                         url: station.source === 'ocm' ? 
                             'https://maps.google.com/mapfiles/ms/icons/green-dot.png' : 
@@ -115,12 +176,50 @@
                     }
                 });
                 
-                markers.push(marker);
-                
-                // Add click listener
-                marker.addListener('click', () => {
-                    showStationInfo(station);
+                // Create info window
+                const sourceLabel = station.source === 'ocm' ? 'Open Charge Map' : 'Google Maps';
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `
+                        <div style="min-width: 200px;">
+                            <h3 style="font-weight: bold; margin-bottom: 5px;">${station.name}</h3>
+                            <p style="margin-bottom: 3px;"><b>Source:</b> ${sourceLabel}</p>
+                            <p style="color: ${station.is_operational ? 'green' : 'red'}">
+                                ${station.is_operational ? 'Operational' : 'Not Operational'}
+                            </p>
+                            <button 
+                                onclick="showStationInfo(${markers.length})" 
+                                style="background-color: #4F46E5; color: white; padding: 4px 8px; border-radius: 4px; margin-top: 5px;">
+                                More Details
+                            </button>
+                        </div>
+                    `
                 });
+                
+                // Add marker click listener
+                marker.addListener('click', () => {
+                    // Close any open info windows
+                    infoWindows.forEach(iw => iw.close());
+                    
+                    // Open this info window
+                    infoWindow.open(map, marker);
+                    
+                    // Remove animation from previously selected marker
+                    if (selectedMarker) {
+                        selectedMarker.setAnimation(null);
+                    }
+                    
+                    // Animate clicked marker
+                    marker.setAnimation(google.maps.Animation.BOUNCE);
+                    setTimeout(() => {
+                        marker.setAnimation(null);
+                    }, 1500);
+                    
+                    selectedMarker = marker;
+                });
+                
+                // Store marker and info window
+                markers.push(marker);
+                infoWindows.push(infoWindow);
             });
             
             // Fit map to show all points
@@ -135,19 +234,52 @@
         }
 
         function clearMap() {
+            // Close all info windows
+            infoWindows.forEach(infoWindow => infoWindow.close());
+            
+            // Remove all markers
             markers.forEach(marker => marker.setMap(null));
+            
+            // Remove all route lines
             routeLines.forEach(line => line.setMap(null));
+            
+            // Clear arrays
             markers = [];
             routeLines = [];
+            infoWindows = [];
+            selectedMarker = null;
         }
 
         function updateStationsList(stations) {
             const container = document.getElementById('stations-list');
+            const noStationsMessage = document.getElementById('no-stations-message');
             container.innerHTML = '';
             
-            stations.forEach(station => {
+            if (stations.length === 0) {
+                noStationsMessage.classList.remove('hidden');
+                container.appendChild(noStationsMessage);
+                return;
+            }
+            
+            noStationsMessage.classList.add('hidden');
+            
+            stations.forEach((station, index) => {
                 const div = document.createElement('div');
-                div.className = 'border rounded-lg p-4';
+                div.className = 'border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors duration-200';
+                div.onclick = () => {
+                    // Trigger the marker click
+                    if (markers[index]) {
+                        google.maps.event.trigger(markers[index], 'click');
+                        
+                        // Pan the map to center on this marker
+                        map.panTo(markers[index].getPosition());
+                        map.setZoom(15);
+                    }
+                };
+                
+                const sourceLabel = station.source === 'ocm' ? 'Open Charge Map' : 'Google Maps';
+                const sourceColor = station.source === 'ocm' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
+                
                 div.innerHTML = `
                     <div class="flex items-center justify-between">
                         <h4 class="font-medium">${station.name}</h4>
@@ -158,20 +290,80 @@
                         </span>
                     </div>
                     <p class="text-sm text-gray-600 mt-1">${station.address}</p>
-                    ${station.source === 'ocm' ? 
-                        `<p class="text-sm text-gray-600">Power: ${station.power_kw}kW</p>
-                         <p class="text-sm text-gray-600">Connectors: ${station.connectors.join(', ')}</p>` :
-                        `<p class="text-sm text-gray-600">Rating: ${station.rating}</p>`
+                    <div class="flex justify-between items-center mt-2">
+                        ${station.source === 'ocm' ? 
+                            `<p class="text-sm text-gray-600">Power: ${station.power_kw}kW</p>` :
+                            `<p class="text-sm text-gray-600">Rating: ${station.rating}</p>`
+                        }
+                        <span class="text-xs px-2 py-1 rounded ${sourceColor}">
+                            ${sourceLabel}
+                        </span>
+                    </div>
+                    ${station.source === 'ocm' && station.connectors ? 
+                        `<p class="text-sm text-gray-600 mt-1">Connectors: ${
+                            Array.isArray(station.connectors) ? station.connectors.join(', ') : 'Not specified'
+                        }</p>` : ''
                     }
-                    <a href="https://www.google.com/maps/search/?api=1&query=${station.lat},${station.lng}" 
-                       target="_blank" 
-                       class="text-indigo-600 text-sm hover:text-indigo-800">
-                        View on Google Maps
-                    </a>
                 `;
                 container.appendChild(div);
             });
         }
+        
+        function showStationInfo(markerIndex) {
+            const station = routes[currentRouteId].charging_stations[markerIndex];
+            const modal = document.getElementById('station-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalContent = document.getElementById('modal-content');
+            const modalDirectionsBtn = document.getElementById('modal-directions-btn');
+            
+            modalTitle.textContent = station.name;
+            
+            // Generate content based on station source
+            const sourceLabel = station.source === 'ocm' ? 'Open Charge Map' : 'Google Maps';
+            const sourceColorClass = station.source === 'ocm' ? 'text-green-600' : 'text-blue-600';
+            
+            let content = `
+                <p><strong>Address:</strong> ${station.address}</p>
+                <p><strong>Status:</strong> <span class="${
+                    station.is_operational ? 'text-green-600' : 'text-red-600'
+                }">${station.is_operational ? 'Operational' : 'Not Operational'}</span></p>
+                <p><strong>Data Source:</strong> <span class="${sourceColorClass}">${sourceLabel}</span></p>
+            `;
+            
+            // Add source-specific details
+            if (station.source === 'ocm') {
+                content += `
+                    <p><strong>Power:</strong> ${station.power_kw}kW</p>
+                    <p><strong>Connectors:</strong> ${
+                        Array.isArray(station.connectors) ? station.connectors.join(', ') : 'Not specified'
+                    }</p>
+                `;
+            } else {
+                content += `<p><strong>Rating:</strong> ${station.rating}</p>`;
+            }
+            
+            modalContent.innerHTML = content;
+            
+            // Set up directions button
+            modalDirectionsBtn.onclick = () => {
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`, '_blank');
+            };
+            
+            // Show modal
+            modal.classList.remove('hidden');
+        }
+        
+        function closeModal() {
+            document.getElementById('station-modal').classList.add('hidden');
+        }
+
+        // Close modal when clicking outside
+        window.onclick = (event) => {
+            const modal = document.getElementById('station-modal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        };
 
         // Initialize map on page load
         document.addEventListener('DOMContentLoaded', initMap);
