@@ -6,7 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ChargeRoute - Route Details</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry"></script>
+    <style>
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 0.5rem;
+        }
+    </style>
 </head>
 <body class="bg-gray-50">
     <header class="bg-white shadow-sm py-4 mb-6">
@@ -65,7 +71,7 @@
             <!-- Map -->
             <div class="lg:col-span-2">
                 <div class="bg-white rounded-xl shadow-lg p-6">
-                    <div id="map" class="h-96 w-full rounded-lg"></div>
+                    <div id="map"></div>
                 </div>
 
                 <!-- Charging Stations -->
@@ -104,30 +110,211 @@
     </main>
 
     <script>
+        // Global variables
         let map;
         let markers = [];
         let routeLines = [];
         let currentRouteId = 0;
         let selectedMarker = null;
         let infoWindows = [];
-        const routes = {{ routes|tojson|safe }};
+        let routes = {{ routes|tojson|safe }};
         
+        // Initialize map
         function initMap() {
+            console.log("Initializing map...");
+            
+            // Default center (first route's first point or India)
+            const defaultCenter = routes && routes.length > 0 && routes[0].points.length > 0
+                ? { lat: routes[0].points[0].lat, lng: routes[0].points[0].lng }
+                : { lat: 20.5937, lng: 78.9629 };
+
+            // Create map
             map = new google.maps.Map(document.getElementById('map'), {
-                zoom: 7,
-                center: { lat: routes[0].points[0].lat, lng: routes[0].points[0].lng },
+                zoom: 5,
+                center: defaultCenter,
                 mapTypeControl: true,
                 fullscreenControl: true,
-                streetViewControl: false,
-                mapTypeId: google.maps.MapTypeId.ROADMAP
+                streetViewControl: false
             });
+
+            console.log("Map created, showing initial route");
             
-            // Show first route by default
-            showRoute(0);
+            // Show first route
+            if (routes && routes.length > 0) {
+                showRoute(0);
+            }
         }
 
+        // Show route on map
         function showRoute(routeId) {
-            // Highlight selected route
+            console.log("Showing route:", routeId);
+            
+            // Clear existing markers and routes
+            clearMap();
+            
+            const route = routes[routeId];
+            if (!route || !route.points || route.points.length === 0) {
+                console.error("Invalid route data");
+                return;
+            }
+
+            console.log("Route data:", route);
+            console.log("Number of charging stations:", route.charging_stations ? route.charging_stations.length : 0);
+
+            // Create bounds
+            const bounds = new google.maps.LatLngBounds();
+
+            // Create route line
+            const routePath = new google.maps.Polyline({
+                path: route.points,
+                geodesic: true,
+                strokeColor: '#4F46E5',
+                strokeOpacity: 1.0,
+                strokeWeight: 3,
+                map: map
+            });
+            routeLines.push(routePath);
+
+            // Add start and end markers
+            const startPoint = route.points[0];
+            const endPoint = route.points[route.points.length - 1];
+
+            // Start marker
+            const startMarker = new google.maps.Marker({
+                position: startPoint,
+                map: map,
+                icon: {
+                    url: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
+                    scaledSize: new google.maps.Size(32, 32)
+                },
+                title: 'Start'
+            });
+            markers.push(startMarker);
+            bounds.extend(startPoint);
+
+            // End marker
+            const endMarker = new google.maps.Marker({
+                position: endPoint,
+                map: map,
+                icon: {
+                    url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+                    scaledSize: new google.maps.Size(32, 32)
+                },
+                title: 'End'
+            });
+            markers.push(endMarker);
+            bounds.extend(endPoint);
+
+            // Add charging station markers
+            if (route.charging_stations && route.charging_stations.length > 0) {
+                console.log('Adding charging stations:', route.charging_stations.length);
+                route.charging_stations.forEach((station, index) => {
+                    if (!station.lat || !station.lng) {
+                        console.error('Invalid station coordinates:', station);
+                        return;
+                    }
+
+                    const position = { lat: parseFloat(station.lat), lng: parseFloat(station.lng) };
+                    
+                    // Create marker
+                    const marker = new google.maps.Marker({
+                        position: position,
+                        map: map,
+                        icon: {
+                            url: station.source === 'google' 
+                                ? 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+                                : 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
+                            scaledSize: new google.maps.Size(32, 32)
+                        },
+                        title: station.name,
+                        animation: google.maps.Animation.DROP
+                    });
+
+                    // Create detailed info window content
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: `
+                            <div style="padding: 10px; max-width: 200px;">
+                                <h3 style="font-weight: bold; margin-bottom: 5px;">${station.name}</h3>
+                                <p style="margin-bottom: 5px;">${station.address}</p>
+                                <p style="margin-bottom: 5px;">Source: ${station.source}</p>
+                                ${station.rating ? `<p style="margin-bottom: 5px;">Rating: ${station.rating}</p>` : ''}
+                                ${station.power_kw ? `<p style="margin-bottom: 5px;">Power: ${station.power_kw}kW</p>` : ''}
+                                <button 
+                                    onclick="showStationInfo(${index})"
+                                    style="background-color: #4F46E5; color: white; padding: 4px 8px; border-radius: 4px; margin-top: 5px;">
+                                    More Details
+                                </button>
+                            </div>
+                        `
+                    });
+
+                    // Add click listener
+                    marker.addListener('click', () => {
+                        // Close all other info windows
+                        infoWindows.forEach(iw => iw.close());
+                        infoWindow.open(map, marker);
+                    });
+
+                    markers.push(marker);
+                    infoWindows.push(infoWindow);
+                    bounds.extend(position);
+                });
+            }
+
+            // Extend bounds with all route points
+            route.points.forEach(point => {
+                bounds.extend(new google.maps.LatLng(point.lat, point.lng));
+            });
+
+            // Fit map to bounds with padding
+            map.fitBounds(bounds, {
+                padding: {
+                    top: 50,
+                    right: 50,
+                    bottom: 50,
+                    left: 50
+                }
+            });
+
+            // Update UI
+            updateRouteSelection(routeId);
+            updateStationsList(route.charging_stations);
+            currentRouteId = routeId;
+        }
+
+        // Clear map
+        function clearMap() {
+            // Close all info windows
+            if (infoWindows) {
+                infoWindows.forEach(iw => iw.close());
+            }
+            
+            // Clear markers
+            if (markers) {
+                markers.forEach(marker => {
+                    if (marker && marker.setMap) {
+                        marker.setMap(null);
+                    }
+                });
+            }
+            
+            // Clear route lines
+            if (routeLines) {
+                routeLines.forEach(line => {
+                    if (line && line.setMap) {
+                        line.setMap(null);
+                    }
+                });
+            }
+            
+            // Reset arrays
+            markers = [];
+            routeLines = [];
+            infoWindows = [];
+        }
+
+        // Update route selection UI
+        function updateRouteSelection(routeId) {
             document.querySelectorAll('#routes-container > div').forEach(div => {
                 div.classList.remove('bg-indigo-50', 'border-indigo-300');
             });
@@ -135,127 +322,22 @@
             if (selectedRoute) {
                 selectedRoute.classList.add('bg-indigo-50', 'border-indigo-300');
             }
-            
-            // Store current route ID
-            currentRouteId = routeId;
-            
-            // Clear existing markers and routes
-            clearMap();
-            
-            const route = routes[routeId];
-            
-            // Draw route
-            const routePath = route.points.map(point => ({
-                lat: point.lat,
-                lng: point.lng
-            }));
-            
-            const routeLine = new google.maps.Polyline({
-                path: routePath,
-                geodesic: true,
-                strokeColor: '#4F46E5',
-                strokeOpacity: 1.0,
-                strokeWeight: 3
-            });
-            
-            routeLine.setMap(map);
-            routeLines.push(routeLine);
-            
-            // Add markers for charging stations
-            route.charging_stations.forEach(station => {
-                // Create marker
-                const marker = new google.maps.Marker({
-                    position: { lat: station.lat, lng: station.lng },
-                    map: map,
-                    title: station.name,
-                    animation: google.maps.Animation.DROP,
-                    icon: {
-                        url: station.source === 'ocm' ? 
-                            'https://maps.google.com/mapfiles/ms/icons/green-dot.png' : 
-                            'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-                    }
-                });
-                
-                // Create info window
-                const sourceLabel = station.source === 'ocm' ? 'Open Charge Map' : 'Google Maps';
-                const infoWindow = new google.maps.InfoWindow({
-                    content: `
-                        <div style="min-width: 200px;">
-                            <h3 style="font-weight: bold; margin-bottom: 5px;">${station.name}</h3>
-                            <p style="margin-bottom: 3px;"><b>Source:</b> ${sourceLabel}</p>
-                            <p style="color: ${station.is_operational ? 'green' : 'red'}">
-                                ${station.is_operational ? 'Operational' : 'Not Operational'}
-                            </p>
-                            <button 
-                                onclick="showStationInfo(${markers.length})" 
-                                style="background-color: #4F46E5; color: white; padding: 4px 8px; border-radius: 4px; margin-top: 5px;">
-                                More Details
-                            </button>
-                        </div>
-                    `
-                });
-                
-                // Add marker click listener
-                marker.addListener('click', () => {
-                    // Close any open info windows
-                    infoWindows.forEach(iw => iw.close());
-                    
-                    // Open this info window
-                    infoWindow.open(map, marker);
-                    
-                    // Remove animation from previously selected marker
-                    if (selectedMarker) {
-                        selectedMarker.setAnimation(null);
-                    }
-                    
-                    // Animate clicked marker
-                    marker.setAnimation(google.maps.Animation.BOUNCE);
-                    setTimeout(() => {
-                        marker.setAnimation(null);
-                    }, 1500);
-                    
-                    selectedMarker = marker;
-                });
-                
-                // Store marker and info window
-                markers.push(marker);
-                infoWindows.push(infoWindow);
-            });
-            
-            // Fit map to show all points
-            const bounds = new google.maps.LatLngBounds();
-            route.points.forEach(point => {
-                bounds.extend(new google.maps.LatLng(point.lat, point.lng));
-            });
-            map.fitBounds(bounds);
-            
-            // Update stations list
-            updateStationsList(route.charging_stations);
         }
 
-        function clearMap() {
-            // Close all info windows
-            infoWindows.forEach(infoWindow => infoWindow.close());
-            
-            // Remove all markers
-            markers.forEach(marker => marker.setMap(null));
-            
-            // Remove all route lines
-            routeLines.forEach(line => line.setMap(null));
-            
-            // Clear arrays
-            markers = [];
-            routeLines = [];
-            infoWindows = [];
-            selectedMarker = null;
-        }
-
+        // Update stations list
         function updateStationsList(stations) {
             const container = document.getElementById('stations-list');
             const noStationsMessage = document.getElementById('no-stations-message');
+            
+            if (!container || !noStationsMessage) {
+                console.error('Station list elements not found');
+                return;
+            }
+            
+            // Clear existing content
             container.innerHTML = '';
             
-            if (stations.length === 0) {
+            if (!stations || stations.length === 0) {
                 noStationsMessage.classList.remove('hidden');
                 container.appendChild(noStationsMessage);
                 return;
@@ -266,13 +348,12 @@
             stations.forEach((station, index) => {
                 const div = document.createElement('div');
                 div.className = 'border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors duration-200';
+                
+                // Add click handler to focus on the station marker
                 div.onclick = () => {
-                    // Trigger the marker click
-                    if (markers[index]) {
-                        google.maps.event.trigger(markers[index], 'click');
-                        
-                        // Pan the map to center on this marker
-                        map.panTo(markers[index].getPosition());
+                    if (markers[index + 2]) { // +2 because first two markers are start and end points
+                        google.maps.event.trigger(markers[index + 2], 'click');
+                        map.panTo(markers[index + 2].getPosition());
                         map.setZoom(15);
                     }
                 };
@@ -293,7 +374,7 @@
                     <div class="flex justify-between items-center mt-2">
                         ${station.source === 'ocm' ? 
                             `<p class="text-sm text-gray-600">Power: ${station.power_kw}kW</p>` :
-                            `<p class="text-sm text-gray-600">Rating: ${station.rating}</p>`
+                            `<p class="text-sm text-gray-600">Rating: ${station.rating || 'N/A'}</p>`
                         }
                         <span class="text-xs px-2 py-1 rounded ${sourceColor}">
                             ${sourceLabel}
@@ -305,8 +386,12 @@
                         }</p>` : ''
                     }
                 `;
+                
                 container.appendChild(div);
             });
+
+            // Log the update
+            console.log(`Updated stations list with ${stations ? stations.length : 0} stations`);
         }
         
         function showStationInfo(markerIndex) {
@@ -364,9 +449,11 @@
                 closeModal();
             }
         };
+    </script>
 
-        // Initialize map on page load
-        document.addEventListener('DOMContentLoaded', initMap);
+    <!-- Load Google Maps API -->
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initMap">
     </script>
 </body>
 </html>
